@@ -1,0 +1,17 @@
+{
+  "name": "eliza",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "elizabot": "0.0.2",
+    "node-tweet-stream": "^1.5.0",
+    "ntwitter": "^0.5.0",
+    "underscore": "^1.7.0"
+  }
+}
