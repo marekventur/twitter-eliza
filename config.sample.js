@@ -6,8 +6,11 @@ module.exports = {
 	    access_token_secret: 'xxx'
     },
     contextTimeout: 60 * 60 * 1000,
-    tweetReplySpeed: 100 * 1000,
+    tweetInterval: 60 * 1000,
     maxContexts: 50,
     search: ['#somehashtag'],
-    twitterUsername: 'xxx'
+    twitterUsername: 'xxx',
+    backOffIntervalInital: 65 * 1000,
+    blockWords: ['bot', 'leave me'],
+    queueItemLifetime: 5 * 60 * 1000
 }

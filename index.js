@@ -11,6 +11,10 @@ var ElizaBot = require('elizabot');
 var _ = require('underscore');
 
 var context = {};
+var backOffInterval = config.backOffIntervalInital;
+var backOffTimer;
+var enabled = true;
+var messageBacklog = [];
 
 twit.verifyCredentials(function (err, data) {
     if (err) {
@@ -20,16 +24,40 @@ twit.verifyCredentials(function (err, data) {
 
     console.log('Credentials verified.');
 
-    function tweetAMessage(message, inReplyTo) {
-        twit.updateStatus(message, {in_reply_to_status_id: inReplyTo}, function (err, data) {
+    setInterval(function() {
+        if (!enabled) {
+            return;
+        }
+
+        if (messageBacklog.length === 0) {
+            console.log('nothing to tweet :(');
+            return;
+        }
+
+        messageBacklog.sort(function(a, b){return b.priority-a.priority});
+
+        var message = messageBacklog.shift();
+
+        twit.updateStatus(message.message, {in_reply_to_status_id: message.inReplyTo}, function (err, data) {
             if (err) {
                 console.error('Error while trying to send tweet:');
                 console.error(err);
-                //process.exit(1);
+                if (_.intersection(_.pluck(err.errors, 'code'), [226, 185])) {
+
+                    enabled = false;
+                    clearTimeout(backOffTimer);
+                    backOffTimer = setTimeout(function() {
+                        backOffInterval *= 2;  
+                        enabled = true;
+                    }, backOffInterval);
+                    console.log('Cooling down for %d ms\n\n', backOffInterval);
+                } 
+            } else {
+                backOffInterval = config.backOffIntervalInital;
             }
         });
 
-    }
+    }, config.tweetInterval);
 
     function getContextForUser(user) {
         if (!context[user.id_str]) {
@@ -74,6 +102,18 @@ twit.verifyCredentials(function (err, data) {
             return; // not replying to myself
         }
 
+        if (!enabled) {
+            return; 
+        }
+
+        var containsBlockWords = _.some(config.blockWords, function(word) {
+            return (tweet.text.indexOf(word) > -1);
+        });
+        if (containsBlockWords) {
+            console.log('caught blockword: %s\n\n', tweet.text);
+            return;
+        }
+        
         var tweetContext = getContextForUser(tweet.user);
         if (tweetContext) {
             console.log('tweet received: %s', tweet.text);
@@ -83,9 +123,34 @@ twit.verifyCredentials(function (err, data) {
                 return; // Twitter doesn't like that.
             }
             console.log('reply:          %s', reply);
-            setTimeout(function() {
-                tweetAMessage(reply, tweet.id_str);
-            }, config.tweetReplySpeed)
+            priority = 0;
+            if (tweet.in_reply_to_screen_name == config.twitterUsername) {
+                priority++;
+            }
+            console.log('priority:       %d', priority);
+
+            var outdatedTimestamp = new Date().getTime() - config.queueItemLifetime;
+            messageBacklog = _.reject(messageBacklog, function(message) {
+                if (message.to === tweet.user.screen_name) {
+                    return true;
+                }
+
+                if (message.timestamp < outdatedTimestamp) {
+                    return true;
+                }
+
+                return false;
+            });
+
+            messageBacklog.push({
+                to: tweet.user.screen_name,
+                message: reply,
+                inReplyTo: tweet.id_str,
+                priority:  priority,
+                timestamp: (new Date().getTime())
+            });
+            console.log('backlog size:   %s', messageBacklog.length);
+
             console.log('\n\n');
         }
     })
